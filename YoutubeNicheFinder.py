@@ -27,8 +27,8 @@ else:
 
 min_views = st.sidebar.number_input("Minimum Total Views", min_value=500000, value=500000)
 
-# Date filter (last 5 days)
-date_filter = (datetime.datetime.utcnow() - datetime.timedelta(days=5)).isoformat() + "Z"
+# Date filter (last 3 months)
+date_filter = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).isoformat() + "Z"
 st.sidebar.write(f"Filtering channels created after: {date_filter[:10]}")
 
 # Function to fetch trending channels
@@ -83,3 +83,4 @@ if filtered_channels:
     st.table(filtered_channels)
 else:
     st.write("No viral channels found with the given criteria.")
+

@@ -1,86 +1,139 @@
+Viral Topics Tool
+
+
+
+
+
+Make youtube API (Google Cloud Console, and then enable youtube APi services)
+Github repository 
+Make app on streamlit 
+Go to streamlit cloud
+Sign In
+Launch your app
+
+
+Code: 
+
+
 import streamlit as st
-import googleapiclient.discovery
-import datetime
+import requests
+from datetime import datetime, timedelta
 
 # YouTube API Key
-API_KEY = "AIzaSyCuUYGZTNiXccQSobvlPlSInOAmcViDhvc"
-youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=API_KEY)
+API_KEY = "Enter your API Key here"
+YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEO_URL = "https://www.googleapis.com/youtube/v3/videos"
+YOUTUBE_CHANNEL_URL = "https://www.googleapis.com/youtube/v3/channels"
 
-# Streamlit UI
-st.title("YouTube Viral Niche Finder Tool")
-st.sidebar.header("Filters")
+# Streamlit App Title
+st.title("YouTube Viral Topics Tool")
 
-# User-defined filters
-sub_range = st.sidebar.selectbox("Select Subscriber Range", [
-    "1K-5K", "5K-10K", "10K-50K", "50K-100K"
-])
+# Input Fields
+days = st.number_input("Enter Days to Search (1-30):", min_value=1, max_value=30, value=5)
 
-# Setting min and max subscriber count based on selection
-if sub_range == "1K-5K":
-    min_subs, max_subs = 1000, 5000
-elif sub_range == "5K-10K":
-    min_subs, max_subs = 5000, 10000
-elif sub_range == "10K-50K":
-    min_subs, max_subs = 10000, 50000
-else:
-    min_subs, max_subs = 50000, 100000
+# List of broader keywords
+keywords = [
+ "Affair Relationship Stories", "Reddit Update", "Reddit Relationship Advice", "Reddit Relationship", 
+"Reddit Cheating", "AITA Update", "Open Marriage", "Open Relationship", "X BF Caught", 
+"Stories Cheat", "X GF Reddit", "AskReddit Surviving Infidelity", "GurlCan Reddit", 
+"Cheating Story Actually Happened", "Cheating Story Real", "True Cheating Story", 
+"Reddit Cheating Story", "R/Surviving Infidelity", "Surviving Infidelity", 
+"Reddit Marriage", "Wife Cheated I Can't Forgive", "Reddit AP", "Exposed Wife", 
+"Cheat Exposed"
+]
 
-min_views = st.sidebar.number_input("Minimum Total Views", min_value=500000, value=500000)
+# Fetch Data Button
+if st.button("Fetch Data"):
+    try:
+        # Calculate date range
+        start_date = (datetime.utcnow() - timedelta(days=int(days))).isoformat("T") + "Z"
+        all_results = []
 
-# Date filter (last 3 months)
-date_filter = (datetime.datetime.utcnow() - datetime.timedelta(days=90)).isoformat() + "Z"
-st.sidebar.write(f"Filtering channels created after: {date_filter[:10]}")
+        # Iterate over the list of keywords
+        for keyword in keywords:
+            st.write(f"Searching for keyword: {keyword}")
 
-# Function to fetch trending channels
-def search_channels():
-    request = youtube.search().list(
-        part="snippet",
-        type="channel",
-        order="date",
-        maxResults=50,
-        publishedAfter=date_filter
-    )
-    response = request.execute()
-    return response.get("items", [])
+            # Define search parameters
+            search_params = {
+                "part": "snippet",
+                "q": keyword,
+                "type": "video",
+                "order": "viewCount",
+                "publishedAfter": start_date,
+                "maxResults": 5,
+                "key": API_KEY,
+            }
 
-# Function to get channel statistics
-def get_channel_stats(channel_id):
-    request = youtube.channels().list(
-        part="statistics",
-        id=channel_id
-    )
-    response = request.execute()
-    stats = response["items"][0]["statistics"]
-    return {
-        "subscribers": int(stats.get("subscriberCount", 0)),
-        "views": int(stats.get("viewCount", 0)),
-        "videos": int(stats.get("videoCount", 0))
-    }
+            # Fetch video data
+            response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
+            data = response.json()
 
-# Filter viral channels
-def is_viral(stats):
-    return stats["views"] / max(stats["videos"], 1) > 10000
+            # Check if "items" key exists
+            if "items" not in data or not data["items"]:
+                st.warning(f"No videos found for keyword: {keyword}")
+                continue
 
-# Search and filter channels
-channels = search_channels()
-filtered_channels = []
+            videos = data["items"]
+            video_ids = [video["id"]["videoId"] for video in videos if "id" in video and "videoId" in video["id"]]
+            channel_ids = [video["snippet"]["channelId"] for video in videos if "snippet" in video and "channelId" in video["snippet"]]
 
-for channel in channels:
-    channel_id = channel["id"]["channelId"]
-    stats = get_channel_stats(channel_id)
-    if min_subs <= stats["subscribers"] <= max_subs and stats["views"] >= min_views and is_viral(stats):
-        filtered_channels.append({
-            "Name": channel["snippet"]["title"],
-            "Subscribers": stats["subscribers"],
-            "Views": stats["views"],
-            "Videos": stats["videos"],
-            "Channel ID": channel_id
-        })
+            if not video_ids or not channel_ids:
+                st.warning(f"Skipping keyword: {keyword} due to missing video/channel data.")
+                continue
 
-# Display results
-if filtered_channels:
-    st.write("### Viral YouTube Channels")
-    st.table(filtered_channels)
-else:
-    st.write("No viral channels found with the given criteria.")
+            # Fetch video statistics
+            stats_params = {"part": "statistics", "id": ",".join(video_ids), "key": API_KEY}
+            stats_response = requests.get(YOUTUBE_VIDEO_URL, params=stats_params)
+            stats_data = stats_response.json()
+
+            if "items" not in stats_data or not stats_data["items"]:
+                st.warning(f"Failed to fetch video statistics for keyword: {keyword}")
+                continue
+
+            # Fetch channel statistics
+            channel_params = {"part": "statistics", "id": ",".join(channel_ids), "key": API_KEY}
+            channel_response = requests.get(YOUTUBE_CHANNEL_URL, params=channel_params)
+            channel_data = channel_response.json()
+
+            if "items" not in channel_data or not channel_data["items"]:
+                st.warning(f"Failed to fetch channel statistics for keyword: {keyword}")
+                continue
+
+            stats = stats_data["items"]
+            channels = channel_data["items"]
+
+            # Collect results
+            for video, stat, channel in zip(videos, stats, channels):
+                title = video["snippet"].get("title", "N/A")
+                description = video["snippet"].get("description", "")[:200]
+                video_url = f"https://www.youtube.com/watch?v={video['id']['videoId']}"
+                views = int(stat["statistics"].get("viewCount", 0))
+                subs = int(channel["statistics"].get("subscriberCount", 0))
+
+                if subs < 3000:  # Only include channels with fewer than 3,000 subscribers
+                    all_results.append({
+                        "Title": title,
+                        "Description": description,
+                        "URL": video_url,
+                        "Views": views,
+                        "Subscribers": subs
+                    })
+
+        # Display results
+        if all_results:
+            st.success(f"Found {len(all_results)} results across all keywords!")
+            for result in all_results:
+                st.markdown(
+                    f"**Title:** {result['Title']}  \n"
+                    f"**Description:** {result['Description']}  \n"
+                    f"**URL:** [Watch Video]({result['URL']})  \n"
+                    f"**Views:** {result['Views']}  \n"
+                    f"**Subscribers:** {result['Subscribers']}"
+                )
+                st.write("---")
+        else:
+            st.warning("No results found for channels with fewer than 3,000 subscribers.")
+
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
 
